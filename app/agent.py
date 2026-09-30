@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 
 from . import metrics
@@ -51,7 +52,23 @@ class LabAgent:
             },
         ):
             started = time.perf_counter()
-            docs = retrieve(message)
+            start_observation = getattr(langfuse_client, "start_as_current_observation", None)
+
+            retrieval_context = (
+                start_observation(
+                    name="retrieval",
+                    as_type="retriever",
+                    input={"query_preview": summarize_text(message)},
+                    metadata={"correlation_id": correlation_id},
+                )
+                if callable(start_observation)
+                else nullcontext()
+            )
+            with retrieval_context as retrieval_obs:
+                docs = retrieve(message)
+                if retrieval_obs is not None:
+                    retrieval_obs.update(output={"doc_count": len(docs)})
+
             prompt = resolve_prompt(
                 langfuse_client,
                 feature=feature,
@@ -71,13 +88,49 @@ class LabAgent:
                 },
                 version=prompt.version,
             )
-            # TODO (CP2): instrument retrieve() and FakeLLM.generate() as child
-            # observations. The nested generation must receive prompt, usage and cost.
+
+            generation_context = (
+                start_observation(
+                    name="llm-generate",
+                    as_type="generation",
+                    model=self.model,
+                    input={"prompt_preview": summarize_text(prompt.text)},
+                    metadata={
+                        "correlation_id": correlation_id,
+                        "prompt_name": prompt.name,
+                        "prompt_label": prompt.label,
+                        "prompt_version": prompt.version,
+                    },
+                    prompt=prompt.managed_prompt,
+                )
+                if callable(start_observation)
+                else nullcontext()
+            )
             with propagate_attributes(prompt=prompt.managed_prompt):
-                response = self.llm.generate(prompt.text)
+                with generation_context as generation_obs:
+                    response = self.llm.generate(prompt.text)
+                    usage = response.usage
+                    input_cost, output_cost = self._cost_breakdown(
+                        usage.input_tokens, usage.output_tokens
+                    )
+                    if generation_obs is not None:
+                        generation_obs.update(
+                            output=summarize_text(response.text),
+                            usage_details={
+                                "prompt_tokens": usage.input_tokens,
+                                "completion_tokens": usage.output_tokens,
+                                "total_tokens": usage.input_tokens + usage.output_tokens,
+                            },
+                            cost_details={
+                                "input_cost": input_cost,
+                                "output_cost": output_cost,
+                                "total_cost": round(input_cost + output_cost, 6),
+                            },
+                            metadata={"ttft_ms": response.ttft_ms},
+                        )
             quality_score = self._heuristic_quality(message, response.text, docs)
             latency_ms = int((time.perf_counter() - started) * 1000)
-            cost_usd = self._estimate_cost(response.usage.input_tokens, response.usage.output_tokens)
+            cost_usd = round(input_cost + output_cost, 6)
 
         metrics.record_request(
             latency_ms=latency_ms,
@@ -98,10 +151,10 @@ class LabAgent:
             quality_score=quality_score,
         )
 
-    def _estimate_cost(self, tokens_in: int, tokens_out: int) -> float:
+    def _cost_breakdown(self, tokens_in: int, tokens_out: int) -> tuple[float, float]:
         input_cost = (tokens_in / 1_000_000) * 3
         output_cost = (tokens_out / 1_000_000) * 15
-        return round(input_cost + output_cost, 6)
+        return round(input_cost, 6), round(output_cost, 6)
 
     def _heuristic_quality(self, question: str, answer: str, docs: list[str]) -> float:
         score = 0.5

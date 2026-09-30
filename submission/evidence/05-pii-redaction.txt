@@ -1,0 +1,7 @@
+Input mau (data/sample_queries.jsonl) chua PII gia:
+"...My email is student@vinuni.edu.vn" | "...phone 0987654321..." | "...credit card 4111 1111 1111 1111"
+
+Log dau ra da scrub:
+{"service": "api", "payload": {"message_preview": "What is your refund policy? My email is [REDACTED_EMAIL]"}, "event": "request_received", "user_id_hash": "2055254ee30a", "session_id": "s01", "env": "dev", "model": "claude-sonnet-4-5", "feature": "qa", "correlation_id": "req-09b8dd7c", "level": "info", "ts": "2026-09-30T09:49:38.390984Z"}
+{"service": "api", "payload": {"message_preview": "Here is my phone [REDACTED_PHONE_VN], what should be logged?"}, "event": "request_received", "user_id_hash": "64f6ec689229", "session_id": "s05", "env": "dev", "model": "claude-sonnet-4-5", "feature": "qa", "correlation_id": "req-0b7b1c54", "level": "info", "ts": "2026-09-30T09:49:41.528851Z"}
+{"service": "api", "payload": {"message_preview": "What is the policy for PII and credit card [REDACTED_CREDIT_CARD]?"}, "event": "request_received", "user_id_hash": "4d14d5d4f719", "session_id": "s09", "env": "dev", "model": "claude-sonnet-4-5", "feature": "qa", "correlation_id": "req-1b682f3a", "level": "info", "ts": "2026-09-30T09:49:42.166559Z"}

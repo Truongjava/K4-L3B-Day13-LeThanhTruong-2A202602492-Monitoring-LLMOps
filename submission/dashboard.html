@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>K4-L3B Day 13 Monitoring &amp; LLMOps</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; background: #f6f7f9; color: #1c2733; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  .meta { color: #5b6b7c; font-size: 12px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+  .panel { background: #fff; border: 1px solid #dde3ea; border-radius: 8px; padding: 10px 12px; }
+  .panel h2 { font-size: 13px; margin: 0 0 4px; }
+  .unit { color: #5b6b7c; font-size: 11px; font-weight: normal; }
+  .values { font-size: 12px; margin: 2px 0 6px; }
+  .values b { font-size: 14px; }
+  .threshold { font-size: 11px; color: #0460a9; }
+  svg { width: 100%; height: 110px; }
+  .line { fill: none; stroke: #0460a9; stroke-width: 2; }
+  .line2 { fill: none; stroke: #d97706; stroke-width: 2; }
+  .bar { fill: #7ea7cd; }
+  .target { stroke: #c2410c; stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .axis { stroke: #cfd8e2; stroke-width: 1; }
+  text { font-size: 9px; fill: #5b6b7c; }
+</style>
+</head>
+<body>
+<h1 id="title"></h1>
+<div class="meta" id="meta"></div>
+<div class="grid" id="grid"></div>
+<script>
+const DATA = {"title": "K4-L3B Day 13 Monitoring & LLMOps", "time_range_minutes": 60, "window_start": "2026-09-30T09:32:58.519852+00:00", "window_end": "2026-09-30T10:32:58.519852+00:00", "panels": [{"id": "latency", "title": "Latency percentiles and TTFT", "unit": "ms", "threshold": {"aggregation": "p95", "operator": "lte", "value": 3000}, "latency_p50": 152.0, "latency_p95": 2653.0, "latency_p99": 2653.0, "ttft_p95": 50.0}, {"id": "traffic", "title": "Request traffic", "unit": "requests_per_minute", "threshold": {"aggregation": "rate_per_minute", "operator": "gte", "value": 1}, "traffic_total": 33, "traffic_rate": 5.5}, {"id": "errors", "title": "Error rate and retrieval success", "unit": "percent", "threshold": {"aggregation": "error_rate_pct", "operator": "lte", "value": 2}, "error_rate": 0.0, "error_breakdown": {}, "retrieval_success": 100.0}, {"id": "cost", "title": "Cost over time", "unit": "usd", "threshold": {"aggregation": "total", "operator": "lte", "value": 2.5}, "cost_total": 0.066927}, {"id": "tokens", "title": "Input and output tokens", "unit": "tokens", "threshold": {"aggregation": "sum_by_field", "operator": "lte", "value": 50000}, "tokens_in_total": 1149, "tokens_out_total": 4232}, {"id": "quality", "title": "Quality proxy", "unit": "score_0_to_1", "threshold": {"aggregation": "mean", "operator": "gte", "value": 0.75}, "quality_avg": 0.87}, {"id": "__series__", "series": [{"minute": "09:49", "count": 10, "failed": 0, "lat_p95": 1365.0, "lat_p50": 152.0, "ttft_p95": 50.0, "cost": 0.019725, "tokens_in": 340, "tokens_out": 1247, "quality": 0.88, "error_rate": 0.0}, {"minute": "10:08", "count": 1, "failed": 0, "lat_p95": 1424.0, "lat_p50": 1424.0, "ttft_p95": 50.0, "cost": 0.001731, "tokens_in": 47, "tokens_out": 106, "quality": 0.9, "error_rate": 0.0}, {"minute": "10:10", "count": 1, "failed": 0, "lat_p95": 1384.0, "lat_p50": 1384.0, "ttft_p95": 50.0, "cost": 0.001653, "tokens_in": 36, "tokens_out": 103, "quality": 0.9, "error_rate": 0.0}, {"minute": "10:12", "count": 11, "failed": 0, "lat_p95": 1411.0, "lat_p50": 152.0, "ttft_p95": 50.0, "cost": 0.023763, "tokens_in": 376, "tokens_out": 1509, "quality": 0.88, "error_rate": 0.0}, {"minute": "10:31", "count": 4, "failed": 0, "lat_p95": 2653.0, "lat_p50": 2653.0, "ttft_p95": 50.0, "cost": 0.005613, "tokens_in": 106, "tokens_out": 353, "quality": 0.83, "error_rate": 0.0}, {"minute": "10:32", "count": 6, "failed": 0, "lat_p95": 2653.0, "lat_p50": 152.0, "ttft_p95": 50.0, "cost": 0.014442, "tokens_in": 244, "tokens_out": 914, "quality": 0.84, "error_rate": 0.0}]}]};
+document.getElementById('title').textContent = DATA.title;
+document.getElementById('meta').textContent =
+  `Time range: ${DATA.time_range_minutes} phút (${DATA.window_start} -> ${DATA.window_end} UTC). Nguồn: data/logs.jsonl. Refresh: chạy lại scripts/build_dashboard.py.`;
+const SERIES = DATA.panels.pop();
+const W = 320, H = 90, PAD = 24;
+
+function chart(values, target, scale2) {
+  const n = values.length;
+  if (!n) return '<div class="values"><i>Chưa có dữ liệu trong cửa sổ.</i></div>';
+  const max = Math.max(...values, ...(target != null && target > 0 ? [target] : []), 1);
+  const min = 0;
+  const x = i => PAD + (n === 1 ? 0 : i * (W - PAD) / (n - 1));
+  const y = v => H - 6 - (v - min) / (max - min) * (H - 12);
+  const pts = values.map((v, i) => x(i) + ',' + y(v)).join(' ');
+  let s = `<svg viewBox="0 0 ${W} ${H}">` +
+    `<line class="axis" x1="${PAD}" y1="${H - 6}" x2="${W - 8}" y2="${H - 6}"/>` +
+    `<line class="axis" x1="${PAD}" y1="${H - 6}" x2="${PAD}" y2="${4}"/>`;
+  if (target != null && target >= min && target <= max) {
+    s += `<line class="target" x1="${PAD}" y1="${y(target)}" x2="${W - 8}" y2="${y(target)}"/>`;
+    s += `<text x="${W - 76}" y="${Math.max(y(target) - 3, 8)}">threshold ${target}</text>`;
+  }
+  s += `<polyline class="line" points="${pts}"/>`;
+  if (scale2) s += `<polyline class="line2" points="${scale2.map((v, i) => x(i) + ',' + y(v)).join(' ')}"/>`;
+  s += `<text x="${PAD}" y="${H - 8}">${SERIES.series[0] ? SERIES.series[0].minute : ''}</text>` +
+       `<text x="${W - 60}" y="${H - 8}">${SERIES.series[n - 1] ? SERIES.series[n - 1].minute : ''}</text></svg>`;
+  return s;
+}
+
+function barChart(values, target) {
+  const n = values.length;
+  if (!n) return '<div class="values"><i>Chưa có dữ liệu trong cửa sổ.</i></div>';
+  const max = Math.max(...values, target ?? 1, 1);
+  const bw = (W - PAD - 8) / n;
+  let s = `<svg viewBox="0 0 ${W} ${H}">` +
+    `<line class="axis" x1="${PAD}" y1="${H - 6}" x2="${W - 8}" y2="${H - 6}"/>`;
+  values.forEach((v, i) => {
+    const h = v / max * (H - 12);
+    s += `<rect class="bar" x="${PAD + i * bw + 1}" y="${H - 6 - h}" width="${Math.max(bw - 2, 1)}" height="${h}"/>`;
+  });
+  s += `<text x="${W - 76}" y="${10}">max ${max}</text></svg>`;
+  return s;
+}
+
+const seriesOf = pick => SERIES.series.map(row => row[pick]);
+const grid = document.getElementById('grid');
+for (const p of DATA.panels) {
+  const t = p.threshold;
+  const th = `${t.aggregation} ${t.operator} ${t.value} (${p.unit})`;
+  let values, svg, labels;
+  if (p.id === 'latency') {
+    labels = `P50 <b>${p.latency_p50}ms</b> · P95 <b>${p.latency_p95}ms</b> · P99 <b>${p.latency_p99}ms</b> · TTFT P95 <b>${p.ttft_p95}ms</b>`;
+    values = 'lat_p95';
+    svg = chart(seriesOf('lat_p95'), t.value, seriesOf('lat_p50'));
+  } else if (p.id === 'traffic') {
+    labels = `Tổng <b>${p.traffic_total}</b> · rate <b>${p.traffic_rate}/${p.unit.replace('_', '/')}</b>`;
+    values = 'count';
+    svg = barChart(seriesOf('count'), t.value);
+  } else if (p.id === 'errors') {
+    const bd = Object.entries(p.error_breakdown).map(([k, v]) => `${k}: ${v}`).join(' · ') || '-';
+    labels = `Error rate <b>${p.error_rate}%</b> · Retrieval success <b>${p.retrieval_success}%</b><br><span style="color:#5b6b7c">Breakdown: ${bd}</span>`;
+    values = 'error_rate';
+    svg = chart(seriesOf('error_rate'), t.value);
+  } else if (p.id === 'cost') {
+    labels = `Tổng <b>$${p.cost_total}</b>`;
+    values = 'cost';
+    svg = chart(seriesOf('cost'), t.value);
+  } else if (p.id === 'tokens') {
+    labels = `Input <b>${p.tokens_in_total}</b> · Output <b>${p.tokens_out_total}</b>`;
+    values = 'tokens_in';
+    svg = chart(seriesOf('tokens_in'), t.value, seriesOf('tokens_out'));
+  } else {
+    labels = `Quality proxy <b>${p.quality_avg}</b> (/1)`;
+    values = 'quality';
+    svg = chart(seriesOf('quality'), t.value);
+  }
+  const div = document.createElement('div');
+  div.className = 'panel';
+  div.innerHTML = `<h2>${p.title} <span class="unit">(${p.unit})</span></h2>
+    <div class="values">${labels}</div>${svg}
+    <div class="threshold">Threshold: ${th}</div>`;
+  grid.appendChild(div);
+}
+</script>
+</body>
+</html>

@@ -1,25 +1,33 @@
 alerts:
-  - name: TODO_alert_1
-    severity: TODO
-    condition: TODO
-    duration: TODO
+  - name: HighLatencyP95
+    severity: warning
+    condition: p95(latency_ms) > 3000ms
+    duration: 5m
     type: symptom-based
     channel: slack
-    owner: TODO
+    slack_channel: "#k4-l3b-alerts"
+    owner: student-2A202602492
     runbook: docs/alerts.md#alert-1
-  - name: TODO_alert_2
-    severity: TODO
-    condition: TODO
-    duration: TODO
+  - name: HighErrorRate
+    severity: critical
+    condition: error_rate_pct > 2%
+    duration: 5m
     type: symptom-based
     channel: slack
-    owner: TODO
+    slack_channel: "#k4-l3b-alerts"
+    owner: student-2A202602492
     runbook: docs/alerts.md#alert-2
-  - name: TODO_alert_3
-    severity: TODO
-    condition: TODO
-    duration: TODO
+  - name: RetrievalSuccessDrop
+    severity: critical
+    condition: tool_success_rate_pct < 90%
+    duration: 5m
     type: symptom-based
     channel: slack
-    owner: TODO
+    slack_channel: "#k4-l3b-alerts"
+    owner: student-2A202602492
     runbook: docs/alerts.md#alert-3
+slo_link:
+  primary: fast_successful_requests
+  error_budget_burn_note: >-
+    Đốt error budget >= 10% trong 1 giờ cần coi là trang khẩn cấp; tham chiếu
+    trang SLO dashboard để xem burn rate trước khi escalate.
